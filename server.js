@@ -1,0 +1,412 @@
+const express = require('express');
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
+const session = require('express-session');
+const http = require('http');
+const { Server } = require('socket.io');
+const multer = require('multer');
+const fs = require('fs');
+const webpush = require('web-push');
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.set('trust proxy', 1);
+
+// ================= SECURE CRYPTOGRAPHIC PUSH NOTIFICATION SETUP =================
+const vapidKeys = webpush.generateVAPIDKeys();
+webpush.setVapidDetails(
+    'mailto:hannanalikh03@gmail.com',
+    vapidKeys.publicKey,
+    vapidKeys.privateKey
+);
+
+const uploadDir = './public/uploads';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// ================= MULTIPART MEDIA FILE DISK PERSISTENCE ENGINE =================
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit for long voice messages
+});
+
+// ================= MIDDLEWARE LAYERS =================
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+const sessionMiddleware = session({
+    secret: 'pingme_secure_session_token_key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { 
+        maxAge: 600000,
+        secure: false, 
+        sameSite: 'lax'
+    }
+});
+app.use(sessionMiddleware);
+
+io.use((socket, next) => {
+    sessionMiddleware(socket.request, {}, next);
+});
+
+// ================= DATABASE STRUCTURAL SCHEMA EXPANSION =================
+const db = new sqlite3.Database('./users.db', (err) => {
+    if (err) console.error('Database connection error:', err.message);
+    else console.log('📁 SQLite "users.db" established successfully.');
+});
+
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS relationships (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id INTEGER NOT NULL,
+        receiver_id INTEGER NOT NULL,
+        status TEXT CHECK(status IN ('pending', 'accepted')) DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(sender_id) REFERENCES users(id),
+        FOREIGN KEY(receiver_id) REFERENCES users(id),
+        UNIQUE(sender_id, receiver_id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        relationship_id INTEGER NOT NULL,
+        sender_id INTEGER NOT NULL,
+        message_text TEXT,
+        file_path TEXT,
+        file_type TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(relationship_id) REFERENCES relationships(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+        user_id INTEGER PRIMARY KEY,
+        subscription_json TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )`);
+});
+
+// ================= NODEMAILER TRANSPORT LAYER =================
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: 'hannanalikh03@gmail.com', pass: 'qaks enom afzh jdax' }
+});
+
+// ================= STATIC PAGE ROUTING =================
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signup.html')));
+
+app.get('/dashboard.html', (req, res) => {
+    if (!req.session.userId) return res.redirect('/login');
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/chat.html', (req, res) => {
+    if (!req.session.userId) return res.redirect('/login');
+    res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
+
+app.get('/api/auth/session', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Session expired.' });
+    return res.status(200).json({ 
+        id: parseInt(req.session.userId), 
+        name: req.session.userName, 
+        email: req.session.userEmail,
+        vapidPublicKey: vapidKeys.publicKey
+    });
+});
+
+// ================= SUBSCRIPTION WORKER ENROLLMENT LOGIC =================
+app.post('/api/notifications/subscribe', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    const subscriptionStr = JSON.stringify(req.body);
+
+    db.run(`INSERT INTO push_subscriptions (user_id, subscription_json) 
+            VALUES (?, ?) 
+            ON CONFLICT(user_id) DO UPDATE SET subscription_json = ?`,
+    [req.session.userId, subscriptionStr, subscriptionStr], (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to preserve notification target bindings.' });
+        return res.status(200).json({ success: true });
+    });
+});
+
+// ================= AUTHENTICATION ENDPOINTS =================
+app.post('/api/auth/send-otp', (req, res) => {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'All fields are required.' });
+
+    db.get('SELECT email FROM users WHERE email = ?', [email], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Database failure.' });
+        if (row) return res.status(400).json({ error: 'Email account is already registered.' });
+
+        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        req.session.pendingUser = { name, email, password, otp: generatedOtp };
+
+        transporter.sendMail({
+            from: '"PingMe Security" <hannanalikh03@gmail.com>',
+            to: email,
+            subject: 'PingMe Verification Request',
+            html: `<p>Your Verification Code: <b>${generatedOtp}</b></p>`
+        }, (error) => {
+            if (error) return res.status(500).json({ error: 'Failed to dispatch email.' });
+            return res.status(200).json({ message: 'Verification key transmitted.' });
+        });
+    });
+});
+
+app.post('/api/auth/verify-and-register', async (req, res) => {
+    const { otp } = req.body;
+    const pending = req.session.pendingUser;
+    if (!pending) return res.status(400).json({ error: 'Verification window expired.' });
+    if (otp !== pending.otp) return res.status(400).json({ error: 'Invalid verification token.' });
+
+    try {
+        const hashedPassword = await bcrypt.hash(pending.password, 10);
+        const stmt = db.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
+        stmt.run(pending.name, pending.email, hashedPassword, function(err) {
+            if (err) return res.status(500).json({ error: 'Write processing conflict.' });
+            req.session.pendingUser = null;
+            return res.status(201).json({ message: 'Profile initialized success!' });
+        });
+        stmt.finalize();
+    } catch (e) { return res.status(500).json({ error: 'Cryptographic exception.' }); }
+});
+
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+        if (err || !user) return res.status(401).json({ error: 'Invalid email or password.' });
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
+
+        req.session.userId = parseInt(user.id);
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+        return res.status(200).json({ message: 'Access authorized successfully.' });
+    });
+});
+
+// ================= EXTENDED SOCIAL INTERACTION ENDPOINTS =================
+app.get('/api/social/search', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    const query = req.query.username.toLowerCase();
+
+    db.all("SELECT id, name, email FROM users WHERE LOWER(name) LIKE ? AND id != ?", [`%${query}%`, req.session.userId], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Searching exception.' });
+        return res.status(200).json(rows);
+    });
+});
+
+app.post('/api/social/request', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    const { receiverId } = req.body;
+
+    db.run("INSERT INTO relationships (sender_id, receiver_id, status) VALUES (?, ?, 'pending')", 
+    [req.session.userId, receiverId], function(err) {
+        if (err) return res.status(400).json({ error: 'Handshake connection already mapped.' });
+        return res.status(200).json({ message: 'Request sent.' });
+    });
+});
+
+app.get('/api/social/requests/incoming', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    db.all(`SELECT r.id, r.sender_id, u.name AS sender_name FROM relationships r 
+            JOIN users u ON r.sender_id = u.id WHERE r.receiver_id = ? AND r.status = 'pending'`, [req.session.userId], (err, rows) => {
+        return res.status(200).json(rows);
+    });
+});
+
+app.post('/api/social/request/respond', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    const { requestId, status } = req.body;
+
+    db.run("UPDATE relationships SET status = 'accepted' WHERE id = ? AND receiver_id = ?", [requestId, req.session.userId], () => {
+        return res.status(200).json({ message: 'Handshake accepted.' });
+    });
+});
+
+app.get('/api/social/friends', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    
+    db.all(`SELECT DISTINCT r.id AS relationship_id, u.id AS friend_id, u.name AS friend_name, u.email AS friend_email
+            FROM relationships r
+            JOIN users u ON u.id = CASE WHEN r.sender_id = ? THEN r.receiver_id ELSE r.sender_id END
+            WHERE (r.sender_id = ? OR r.receiver_id = ?) AND r.status = 'accepted'`,
+    [req.session.userId, req.session.userId, req.session.userId], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Failed to retrieve connection logs.' });
+        return res.status(200).json(rows);
+    });
+});
+
+app.get('/api/social/messages/:relationshipId', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    
+    const cleanId = parseInt(req.params.relationshipId);
+    db.all("SELECT sender_id, message_text, file_path, file_type, timestamp FROM messages WHERE relationship_id = ? ORDER BY id ASC", 
+    [cleanId], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Database history error' });
+        return res.status(200).json(rows);
+    });
+});
+
+app.post('/api/social/messages/upload', upload.single('media'), (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Identity unverified.' });
+    const { relationshipId, messageText } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'No payload received.' });
+
+    const relativePath = `/uploads/${req.file.filename}`;
+    
+    let detectedType = 'image';
+    if (req.file.mimetype.startsWith('video/')) detectedType = 'video';
+    else if (req.file.mimetype.startsWith('audio/')) detectedType = 'audio';
+
+    const senderId = parseInt(req.session.userId);
+    const cleanRoomId = parseInt(relationshipId);
+
+    db.run("INSERT INTO messages (relationship_id, sender_id, message_text, file_path, file_type) VALUES (?, ?, ?, ?, ?)",
+    [cleanRoomId, senderId, messageText || null, relativePath, detectedType], function(err) {
+        if (err) return res.status(500).json({ error: "Storage allocation write execution failure." });
+        
+        io.to(`room_${cleanRoomId}`).emit('new_message', {
+            relationship_id: cleanRoomId,
+            sender_id: senderId,
+            message_text: messageText || null,
+            file_path: relativePath,
+            file_type: detectedType,
+            timestamp: new Date()
+        });
+        return res.status(200).json({ success: true });
+    });
+});
+
+app.get('/api/auth/logout', (req, res) => {
+    req.session.destroy(() => res.redirect('/login'));
+});
+
+// ================= LIVE SOCKET & WEBRTC SIGNALING CONTROLLER =================
+const mappedActiveSockets = {}; 
+
+io.on('connection', (socket) => {
+    const sessionUser = socket.request.session;
+    if (!sessionUser || !sessionUser.userId) return socket.disconnect();
+
+    const currentAuthedUid = parseInt(sessionUser.userId);
+    mappedActiveSockets[currentAuthedUid] = socket.id;
+
+    socket.on('join_chat', ({ relationshipId }) => {
+        const cleanRoomId = parseInt(relationshipId);
+        socket.join(`room_${cleanRoomId}`);
+        console.log(`User ${sessionUser.userId} opened room_${cleanRoomId}`);
+    });
+
+    socket.on('send_message', ({ relationshipId, messageText }) => {
+        const senderId = parseInt(sessionUser.userId);
+        const cleanRoomId = parseInt(relationshipId);
+
+        db.run("INSERT INTO messages (relationship_id, sender_id, message_text, file_path, file_type) VALUES (?, ?, ?, NULL, NULL)", 
+        [cleanRoomId, senderId, messageText], function(err) {
+            if (!err) {
+                io.to(`room_${cleanRoomId}`).emit('new_message', {
+                    relationship_id: cleanRoomId,
+                    sender_id: senderId,
+                    message_text: messageText,
+                    file_path: null,
+                    file_type: null,
+                    timestamp: new Date()
+                });
+            }
+        });
+    });
+
+    // 1. Dial Voice Call
+    socket.on('dial_voice_call', ({ targetFriendId, relationshipId, rtcOffer }) => {
+        const targetSocketId = mappedActiveSockets[parseInt(targetFriendId)];
+        
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('incoming_call_signal', {
+                callerName: sessionUser.userName,
+                callerId: currentAuthedUid,
+                relationshipId: relationshipId,
+                rtcOffer: rtcOffer
+            });
+        } else {
+            db.get("SELECT subscription_json FROM push_subscriptions WHERE user_id = ?", [parseInt(targetFriendId)], (err, row) => {
+                if (!err && row) {
+                    const pushPayload = JSON.stringify({
+                        title: `Incoming Voice Call`,
+                        body: `${sessionUser.userName} is dialing your connection...`,
+                        relationshipId: relationshipId,
+                        callerName: sessionUser.userName
+                    });
+
+                    webpush.sendNotification(JSON.parse(row.subscription_json), pushPayload)
+                        .catch(err => console.error("Push gateway drop trace:", err.message));
+                }
+            });
+        }
+    });
+
+    // 2. Accept Call
+    socket.on('accept_call_signal', ({ targetCallerId, rtcAnswer }) => {
+        const hostSocket = mappedActiveSockets[parseInt(targetCallerId)];
+        if (hostSocket) {
+            io.to(hostSocket).emit('call_accepted_by_peer', { rtcAnswer });
+        }
+    });
+
+    // 3. ICE Trickle Handling
+    socket.on('ice_candidate_leak', ({ targetPeerId, candidate }) => {
+        const destinationSocket = mappedActiveSockets[parseInt(targetPeerId)];
+        if (destinationSocket) {
+            io.to(destinationSocket).emit('incoming_ice_candidate', { candidate });
+        }
+    });
+
+    // 4. Synchronization of Instant Hangups
+    socket.on('hangup_call_signal', ({ targetPeerId }) => {
+        const destinationSocket = mappedActiveSockets[parseInt(targetPeerId)];
+        if (destinationSocket) {
+            io.to(destinationSocket).emit('peer_hung_up_call');
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (mappedActiveSockets[currentAuthedUid] === socket.id) {
+            delete mappedActiveSockets[currentAuthedUid];
+        }
+    });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 System active on port: ${PORT}`);
+});

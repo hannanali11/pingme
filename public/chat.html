@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PingMe — Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background-color: #000000; color: #ffffff; font-family: system-ui, -apple-system, sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 99px; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        .dv-screen { height: 100vh; height: 100dvh; }
+    </style>
+</head>
+<body class="dv-screen w-screen flex flex-col justify-between overflow-hidden select-none">
+
+    <header class="w-full px-4 sm:px-6 py-3.5 border-b border-zinc-900 bg-black flex items-center justify-between z-10 flex-shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+            <a href="/dashboard.html" class="text-zinc-500 hover:text-white text-sm transition flex-shrink-0">&larr; <span class="hidden sm:inline">Dashboard</span></a>
+            <h1 id="chat-header-user" class="text-base sm:text-lg font-medium tracking-tight text-zinc-200 truncate">@username</h1>
+        </div>
+        <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            <button onclick="startCallPipeline(false)" class="px-3 py-1.5 sm:px-4 sm:py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs sm:text-sm font-medium transition duration-300 flex items-center gap-1.5">
+                📞 <span class="hidden xs:inline">Audio</span>
+            </button>
+            <button onclick="startCallPipeline(true)" class="px-3 py-1.5 sm:px-4 sm:py-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-600/20 text-indigo-400 hover:text-white rounded-xl text-xs sm:text-sm font-medium transition duration-300 flex items-center gap-1.5">
+                📹 <span class="hidden xs:inline">Video Call</span>
+            </button>
+        </div>
+    </header>
+
+    <main id="message-stream-box" class="flex-1 w-full max-w-4xl mx-auto overflow-y-auto px-4 sm:px-6 py-4 flex flex-col gap-3"></main>
+
+    <footer class="w-full max-w-4xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 bg-black z-10 flex-shrink-0">
+        <div id="media-preview-container" class="hidden w-full mb-3 p-3 bg-zinc-950 border border-zinc-900 rounded-xl flex items-center justify-between animate-fade-in">
+            <div class="flex items-center gap-3 min-w-0">
+                <span id="payload-icon-indicator" class="text-lg flex-shrink-0">📎</span>
+                <p id="media-preview-name" class="text-xs text-zinc-400 font-light truncate">filename.ext</p>
+            </div>
+            <button type="button" onclick="clearMediaQueue()" class="text-xs text-zinc-500 hover:text-red-400 transition flex-shrink-0 ml-2">Remove</button>
+        </div>
+
+        <form id="chat-input-form" class="w-full flex items-center gap-2">
+            <label class="p-3 bg-zinc-900 text-zinc-400 hover:text-white rounded-xl cursor-pointer transition flex-shrink-0 flex items-center justify-center h-11 w-11">
+                📎
+                <input type="file" id="media-file-input" class="hidden" onchange="handleFileSelection()">
+            </label>
+            
+            <input type="text" id="message-text-input" placeholder="Message..." class="flex-1 px-4 h-11 bg-zinc-900 border border-zinc-800/50 rounded-xl text-zinc-100 placeholder-zinc-500 text-sm focus:outline-none focus:border-indigo-500 transition font-light min-w-0">
+            
+            <button type="button" id="voice-record-btn" onclick="toggleVoiceRecording()" class="h-11 w-11 bg-zinc-900 text-zinc-400 hover:text-white rounded-xl flex-shrink-0 transition flex items-center justify-center">
+                🎙️
+            </button>
+            <button type="submit" class="h-11 w-11 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-500 transition shadow-lg shadow-indigo-600/10 flex-shrink-0 flex items-center justify-center">
+                ➔
+            </button>
+        </form>
+    </footer>
+
+    <div id="voice-call-overlay" class="hidden fixed inset-0 bg-zinc-950 flex flex-col items-center justify-between z-50 p-6 safe-bottom">
+        
+        <div id="video-canvas-container" class="hidden w-full max-w-3xl flex-1 flex flex-col sm:grid sm:grid-cols-2 gap-4 my-auto justify-center">
+            <div class="relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden aspect-video sm:aspect-auto sm:h-full max-h-[35vh] sm:max-h-none shadow-2xl flex items-center justify-center">
+                <video id="local-video-node" autoplay playsinline muted class="w-full h-full object-cover scale-x-[-1]"></video>
+                <span class="absolute bottom-3 left-3 bg-black/70 px-3 py-1 rounded-lg text-xs tracking-wide text-zinc-300 border border-zinc-800/40 backdrop-blur-sm">You</span>
+            </div>
+            <div class="relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden aspect-video sm:aspect-auto sm:h-full max-h-[35vh] sm:max-h-none shadow-2xl flex items-center justify-center">
+                <video id="remote-video-node" autoplay playsinline class="w-full h-full object-cover"></video>
+                <span id="video-remote-tag" class="absolute bottom-3 left-3 bg-black/70 px-3 py-1 rounded-lg text-xs tracking-wide text-zinc-300 border border-zinc-800/40 backdrop-blur-sm">@friend</span>
+            </div>
+        </div>
+
+        <div id="voice-avatar-node" class="flex-1 flex flex-col items-center justify-center w-full">
+            <div class="w-24 h-24 sm:w-28 sm:h-28 bg-indigo-600/10 border border-indigo-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse shadow-xl">
+                <span id="call-mode-icon" class="text-3xl sm:text-4xl">🗣️</span>
+            </div>
+        </div>
+        
+        <div class="w-full text-center mb-6 flex-shrink-0">
+            <h2 id="call-status-title" class="text-lg sm:text-xl font-medium tracking-tight mb-1 text-zinc-100">Live Interface Session</h2>
+            <p id="call-status-subtitle" class="text-xs sm:text-sm text-zinc-500 font-light max-w-xs mx-auto">Establishing connection streams...</p>
+        </div>
+        
+        <div class="flex items-center gap-4 w-full justify-center max-w-sm flex-shrink-0 pb-4">
+            <button id="call-answer-btn" onclick="acceptIncomingCall()" class="hidden flex-1 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium text-sm transition shadow-lg shadow-emerald-600/20 text-center">
+                Answer Call
+            </button>
+            <button onclick="hangupCallStream()" class="flex-1 px-5 py-3.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-medium text-sm transition shadow-lg shadow-red-600/20 text-center">
+                End Connection
+            </button>
+        </div>
+    </div>
+
+    <audio id="remote-voice-node" autoplay playsinline style="position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none;"></audio>
+
+    <script>
+        const socket = io();
+        const urlParams = new URLSearchParams(window.location.search);
+        const relationshipId = parseInt(urlParams.get('id'));
+        const friendName = urlParams.get('name');
+
+        let currentUser = null;
+        let activeMediaFile = null;
+        let audioRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+
+        // WebRTC System Core States
+        let peerConnection = null;
+        let localMediaStream = null;
+        let remoteCallerMetadata = null;
+        let activeCallPartnerId = null;
+        let currentCallIsVideo = false;
+        
+        let iceCandidatesQueue = []; 
+        let ringtoneIntervalId = null;
+        let audioCtx = null;
+
+        const rtcServerConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        if(!relationshipId || !friendName) { window.location.href = '/dashboard.html'; }
+
+        async function initChat() {
+            document.getElementById('chat-header-user').textContent = `@${friendName}`;
+            document.getElementById('video-remote-tag').textContent = `@${friendName}`;
+            
+            const response = await fetch('/api/auth/session');
+            if (!response.ok) { window.location.href = '/login'; return; }
+            currentUser = await response.json();
+
+            if (currentUser.vapidPublicKey) {
+                registerPushWorkerEngine(currentUser.vapidPublicKey);
+            }
+
+            socket.emit('join_chat', { relationshipId: relationshipId });
+            fetchMessageHistory();
+
+            if (urlParams.get('autoAnswer') === 'true') {
+                setTimeout(() => { startCallPipeline(false); }, 1200);
+            }
+        }
+
+        async function registerPushWorkerEngine(publicVapidKey) {
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                try {
+                    const reg = await navigator.serviceWorker.register('/sw.js');
+                    let sub = await reg.pushManager.getSubscription();
+                    if (!sub) {
+                        sub = await reg.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                        });
+                    }
+                    await fetch('/api/notifications/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(sub)
+                    });
+                } catch (err) { console.warn("Push deployment deferred:", err); }
+            }
+        }
+
+        // ================= BULLETPROOF HARDWARE & TRACK ENGINE =================
+        async function setupWebRtcConnectionPipeline(targetPeerId, wantVideo = false, isInitiator = false) {
+            peerConnection = new RTCPeerConnection(rtcServerConfig);
+            activeCallPartnerId = targetPeerId;
+            currentCallIsVideo = wantVideo;
+            iceCandidatesQueue = [];
+
+            // Bind stream handlers immediately to catch early tracks
+            peerConnection.ontrack = (event) => {
+                console.log("WebRTC Media Track coming from peer:", event.track.kind);
+                const incomingStream = event.streams[0] || new MediaStream([event.track]);
+                
+                if (event.track.kind === 'video') {
+                    document.getElementById('video-canvas-container').classList.remove('hidden');
+                    document.getElementById('video-canvas-container').classList.add('flex', 'sm:grid');
+                    document.getElementById('voice-avatar-node').classList.add('hidden');
+
+                    const remoteVideoNode = document.getElementById('remote-video-node');
+                    if (remoteVideoNode) {
+                        remoteVideoNode.srcObject = incomingStream;
+                        remoteVideoNode.onloadedmetadata = () => {
+                            remoteVideoNode.play().catch(e => console.error("Remote video play failed:", e));
+                        };
+                    }
+                }
+                
+                if (event.track.kind === 'audio') {
+                    const remoteAudioNode = document.getElementById('remote-voice-node');
+                    if (remoteAudioNode) {
+                        remoteAudioNode.srcObject = incomingStream;
+                        remoteAudioNode.play().catch(err => console.error("Remote audio autoplay blocked:", err));
+                    }
+                }
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice_candidate_leak', { targetPeerId: targetPeerId, candidate: event.candidate });
+                }
+            };
+
+            if (isInitiator) {
+                peerConnection.onnegotiationneeded = async () => {
+                    try {
+                        const rtcOffer = await peerConnection.createOffer({
+                            offerToReceiveAudio: true,
+                            offerToReceiveVideo: wantVideo
+                        });
+                        await peerConnection.setLocalDescription(rtcOffer);
+                        
+                        socket.emit('dial_voice_call', {
+                            targetFriendId: targetPeerId,
+                            relationshipId: relationshipId,
+                            rtcOffer: rtcOffer,
+                            isVideoCall: wantVideo
+                        });
+                    } catch (err) {
+                        console.error("Negotiation setup failed:", err);
+                    }
+                };
+            }
+
+            // Configure device hardware explicitly
+            const baseAudioConstraints = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+
+            const baseVideoConstraints = { 
+                width: { ideal: 640, max: 1280 }, 
+                height: { ideal: 480, max: 720 }, 
+                facingMode: "user" 
+            };
+
+            try {
+                // FORCE capture logic using the accurate wantVideo variable configuration state
+                localMediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: baseAudioConstraints,
+                    video: wantVideo ? baseVideoConstraints : false
+                });
+            } catch (primaryError) {
+                console.warn("Hardware media access failed. Attempting audio fallback layer...", primaryError);
+                if (wantVideo) {
+                    try {
+                        localMediaStream = await navigator.mediaDevices.getUserMedia({
+                            audio: baseAudioConstraints,
+                            video: false
+                        });
+                        currentCallIsVideo = false;
+                        wantVideo = false;
+                        document.getElementById('call-status-subtitle').textContent = "Connected (Audio Only)";
+                    } catch (err) {
+                        throw new Error("Hardware capture rejected by device OS permissions.");
+                    }
+                } else {
+                    throw primaryError;
+                }
+            }
+
+            // Sync structural wrapper layout changes instantly
+            if (wantVideo) {
+                document.getElementById('video-canvas-container').classList.remove('hidden');
+                document.getElementById('video-canvas-container').classList.add('flex', 'sm:grid');
+                document.getElementById('voice-avatar-node').classList.add('hidden');
+                
+                const localVideoNode = document.getElementById('local-video-node');
+                if (localVideoNode) {
+                    localVideoNode.srcObject = localMediaStream;
+                }
+            } else {
+                document.getElementById('video-canvas-container').classList.add('hidden');
+                document.getElementById('video-canvas-container').classList.remove('flex', 'sm:grid');
+                document.getElementById('voice-avatar-node').classList.remove('hidden');
+            }
+
+            // Bind tracks directly to network flow engine
+            localMediaStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localMediaStream);
+            });
+        }
+
+        // ================= PHONE RING SYSTEM ENGINE LOOP =================
+        function startRingtonePlaybackLoop() {
+            if (ringtoneIntervalId) return;
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            const playTonePulse = () => {
+                if (!audioCtx || audioCtx.state === 'suspended') audioCtx.resume();
+                
+                let osc1 = audioCtx.createOscillator();
+                let osc2 = audioCtx.createOscillator();
+                let gainNode = audioCtx.createGain();
+
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(480, audioCtx.currentTime);
+
+                gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.1); 
+                gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime + 1.2);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.4); 
+
+                osc1.connect(gainNode); osc2.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                osc1.start(); osc2.start();
+                osc1.stop(audioCtx.currentTime + 1.5); osc2.stop(audioCtx.currentTime + 1.5);
+            };
+
+            playTonePulse();
+            ringtoneIntervalId = setInterval(playTonePulse, 3000); 
+        }
+
+        function stopRingtonePlaybackLoop() {
+            if (ringtoneIntervalId) {
+                clearInterval(ringtoneIntervalId);
+                ringtoneIntervalId = null;
+            }
+        }
+
+        // ================= CALL FLOW MANAGEMENT CONTROL =================
+        async function startCallPipeline(isVideo = false) {
+            document.getElementById('voice-call-overlay').classList.remove('hidden');
+            document.getElementById('call-mode-icon').textContent = isVideo ? "📹" : "🗣️";
+            document.getElementById('call-status-title').textContent = `Calling @${friendName}...`;
+            document.getElementById('call-status-subtitle').textContent = `Ringing recipient device...`;
+
+            if (!isVideo) {
+                document.getElementById('video-canvas-container').classList.add('hidden');
+                document.getElementById('video-canvas-container').classList.remove('flex', 'sm:grid');
+                document.getElementById('voice-avatar-node').classList.remove('hidden');
+            }
+
+            startRingtonePlaybackLoop(); 
+
+            try {
+                const friendsRes = await fetch('/api/social/friends');
+                const connections = await friendsRes.json();
+                const logMatch = connections.find(c => c.relationship_id === relationshipId);
+                if (!logMatch) return alert("Connection profiles unmapped.");
+
+                await setupWebRtcConnectionPipeline(logMatch.friend_id, isVideo, true);
+            } catch (err) {
+                console.error(err);
+                alert("Could not start call components: " + err.message);
+                executeLocalCleanup();
+            }
+        }
+
+        socket.on('incoming_call_signal', async (data) => {
+            if (parseInt(data.relationshipId) !== relationshipId) return;
+            remoteCallerMetadata = data;
+            activeCallPartnerId = data.callerId;
+            currentCallIsVideo = !!data.isVideoCall; // Sync video context explicitly
+
+            document.getElementById('voice-call-overlay').classList.remove('hidden');
+            document.getElementById('call-mode-icon').textContent = currentCallIsVideo ? "📹" : "🗣️";
+            document.getElementById('call-status-title').textContent = `${data.callerName} is calling...`;
+            document.getElementById('call-status-subtitle').textContent = `Inbound request connection pending`;
+            document.getElementById('call-answer-btn').classList.remove('hidden');
+            
+            document.getElementById('video-canvas-container').classList.add('hidden');
+            document.getElementById('video-canvas-container').classList.remove('flex', 'sm:grid');
+            document.getElementById('voice-avatar-node').classList.remove('hidden');
+
+            startRingtonePlaybackLoop(); 
+        });
+
+        async function acceptIncomingCall() {
+            if (!remoteCallerMetadata) return;
+            stopRingtonePlaybackLoop(); 
+
+            // Sync execution context to the incoming metadata parameters directly
+            const requireVideo = !!remoteCallerMetadata.isVideoCall;
+
+            document.getElementById('call-answer-btn').classList.add('hidden');
+            document.getElementById('call-status-title').textContent = `Connected`;
+            document.getElementById('call-status-subtitle').textContent = `Media feed links active`;
+
+            try {
+                // Force pipeline activation using metadata explicitly
+                await setupWebRtcConnectionPipeline(remoteCallerMetadata.callerId, requireVideo, false);
+                
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteCallerMetadata.rtcOffer));
+
+                const rtcAnswer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(rtcAnswer);
+
+                socket.emit('accept_call_signal', {
+                    targetCallerId: remoteCallerMetadata.callerId,
+                    rtcAnswer: rtcAnswer
+                });
+
+                while(iceCandidatesQueue.length > 0) {
+                    const candidate = iceCandidatesQueue.shift();
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {});
+                }
+            } catch (err) {
+                console.error("Failed accepting incoming call parameters:", err);
+                executeLocalCleanup();
+            }
+        }
+
+        socket.on('call_accepted_by_peer', async (data) => {
+            stopRingtonePlaybackLoop(); 
+            document.getElementById('call-status-title').textContent = `Connected`;
+            document.getElementById('call-status-subtitle').textContent = `Media feed links active`;
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.rtcAnswer));
+            
+            while(iceCandidatesQueue.length > 0) {
+                const candidate = iceCandidatesQueue.shift();
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {});
+            }
+        });
+
+        function hangupCallStream() {
+            if (activeCallPartnerId) {
+                socket.emit('hangup_call_signal', { targetPeerId: activeCallPartnerId });
+            }
+            executeLocalCleanup();
+        }
+
+        socket.on('peer_hung_up_call', () => {
+            executeLocalCleanup();
+        });
+
+        function executeLocalCleanup() {
+            stopRingtonePlaybackLoop();
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localMediaStream) {
+                localMediaStream.getTracks().forEach(track => track.stop());
+                localMediaStream = null;
+            }
+            
+            remoteCallerMetadata = null;
+            activeCallPartnerId = null;
+            iceCandidatesQueue = [];
+
+            document.getElementById('voice-call-overlay').classList.add('hidden');
+            document.getElementById('call-answer-btn').classList.add('hidden');
+            
+            document.getElementById('remote-voice-node').srcObject = null;
+            document.getElementById('local-video-node').srcObject = null;
+            document.getElementById('remote-video-node').srcObject = null;
+        }
+
+        socket.on('incoming_ice_candidate', async (data) => {
+            if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {});
+            } else {
+                iceCandidatesQueue.push(data.candidate);
+            }
+        });
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+            return outputArray;
+        }
+
+        // ================= MESSAGE HISTORY & UTILITY LAYER =================
+        async function fetchMessageHistory() {
+            const box = document.getElementById('message-stream-box'); box.innerHTML = '';
+            try {
+                const res = await fetch(`/api/social/messages/${relationshipId}`); if (!res.ok) return;
+                const logs = await res.json(); if (Array.isArray(logs)) { logs.forEach(msg => appendMessageElement(msg)); }
+                box.scrollTop = box.scrollHeight;
+            } catch (err) { console.error(err); }
+        }
+
+        function handleFileSelection() {
+            const input = document.getElementById('media-file-input');
+            if (input.files && input.files[0]) {
+                activeMediaFile = input.files[0]; document.getElementById('payload-icon-indicator').textContent = '📎';
+                document.getElementById('media-preview-name').textContent = `Payload File: ${activeMediaFile.name}`;
+                document.getElementById('media-preview-container').classList.remove('hidden');
+            }
+        }
+
+        async function toggleVoiceRecording() {
+            const btn = document.getElementById('voice-record-btn'); const txtInput = document.getElementById('message-text-input');
+            if (!isRecording) {
+                try {
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); audioChunks = []; audioRecorder = new MediaRecorder(audioStream);
+                    audioRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+                    audioRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); activeMediaFile = new File([audioBlob], `voice_note_${Date.now()}.webm`, { type: 'audio/webm' });
+                        document.getElementById('payload-icon-indicator').textContent = '🎙️'; document.getElementById('media-preview-name').textContent = `Voice Message Capture Completed`;
+                        document.getElementById('media-preview-container').classList.remove('hidden'); audioStream.getTracks().forEach(track => track.stop());
+                    };
+                    audioRecorder.start(); isRecording = true; btn.className = "h-11 w-11 bg-red-600 text-white rounded-xl flex-shrink-0 animate-pulse flex items-center justify-center"; btn.textContent = "🛑"; txtInput.disabled = true;
+                } catch (e) { alert("Mic interface access blocked."); }
+            } else {
+                if (audioRecorder && audioRecorder.state !== "inactive") audioRecorder.stop();
+                isRecording = false; btn.className = "h-11 w-11 bg-zinc-900 text-zinc-400 rounded-xl flex-shrink-0 flex items-center justify-center"; btn.textContent = "🎙️"; txtInput.disabled = false;
+            }
+        }
+
+        function clearMediaQueue() { activeMediaFile = null; document.getElementById('media-file-input').value = ''; document.getElementById('media-preview-container').classList.add('hidden'); }
+
+        function appendMessageElement(msg) {
+            const box = document.getElementById('message-stream-box'); if (!msg || !currentUser) return;
+            const isSelf = parseInt(msg.sender_id) === parseInt(currentUser.id);
+            const msgRow = document.createElement('div'); msgRow.className = `flex w-full ${isSelf ? 'justify-end' : 'justify-start'} mb-2`;
+            let p = '';
+            if (msg.file_path) {
+                if (msg.file_type === 'image') p = `<img src="${msg.file_path}" class="rounded-xl max-w-xs max-h-60 object-cover mt-1 cursor-pointer" onclick="window.open('${msg.file_path}')">`;
+                else if (msg.file_type === 'video') p = `<video src="${msg.file_path}" controls class="rounded-xl max-w-xs max-h-60 mt-1"></video>`;
+                else if (msg.file_type === 'audio') p = `<audio src="${msg.file_path}" controls class="mt-1 w-[240px] max-w-full h-9 filter invert accent-indigo-600 text-xs"></audio>`;
+            }
+            if (msg.message_text) p += `<p class="font-light ${msg.file_path ? 'mt-2 border-t border-zinc-800/50 pt-1.5' : ''}">${msg.message_text}</p>`;
+            msgRow.innerHTML = `<div class="max-w-xs px-3.5 py-2 rounded-xl border ${isSelf ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-300'}">${p}</div>`;
+            box.appendChild(msgRow); box.scrollTop = box.scrollHeight;
+        }
+
+        document.getElementById('chat-input-form').addEventListener('submit', async (e) => {
+            e.preventDefault(); const textInput = document.getElementById('message-text-input'); const text = textInput.value.trim();
+            if (!text && !activeMediaFile) return;
+            if (activeMediaFile) {
+                const f = new FormData(); f.append('relationshipId', relationshipId); f.append('messageText', text); f.append('media', activeMediaFile);
+                textInput.value = ''; clearMediaQueue();
+                try { await fetch('/api/social/messages/upload', { method: 'POST', body: f }); } catch(err) { console.error(err); }
+            } else {
+                socket.emit('send_message', { relationshipId: relationshipId, messageText: text }); textInput.value = '';
+            }
+        });
+
+        socket.on('new_message', (msg) => { if (msg && parseInt(msg.relationship_id) === relationshipId) appendMessageElement(msg); });
+
+        initChat();
+    </script>
+</body>
+</html>

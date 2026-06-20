@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pingme — account access</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex items-center justify-center p-6 selection:bg-indigo-500 selection:text-white">
+
+    <div class="bg-zinc-900/30 border border-zinc-900 p-8 rounded-2xl shadow-2xl backdrop-blur-md max-w-sm w-full transition-all duration-300">
+        
+        <div class="mb-8">
+            <a href="/" class="text-lg font-bold tracking-tight text-white flex items-center gap-2 mb-6">
+                <span class="h-2 w-2 rounded-full bg-indigo-500"></span>
+                pingme
+            </a>
+            <h2 id="formTitle" class="text-xl font-normal text-white tracking-tight">Welcome back.</h2>
+            <p id="formSubtitle" class="text-xs text-zinc-500 mt-1 font-light">Input authorization parameters to access your terminal.</p>
+        </div>
+
+        <div id="alertBox" class="hidden text-xs p-3.5 mb-5 rounded-xl border font-light"></div>
+
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label class="block text-[10px] uppercase font-medium tracking-wider text-zinc-500 mb-1.5">Email Address</label>
+                <input type="email" id="loginEmail" required class="w-full px-4 py-3 bg-zinc-950 border border-zinc-900 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-xs text-zinc-200 font-light placeholder-zinc-700" placeholder="name@domain.com">
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1.5">
+                    <label class="block text-[10px] uppercase font-medium tracking-wider text-zinc-500">Secret Password</label>
+                    <button type="button" onclick="switchToForgot()" class="text-[10px] uppercase font-medium tracking-wider text-indigo-400 hover:text-indigo-300">Forgot?</button>
+                </div>
+                <input type="password" id="loginPassword" required class="w-full px-4 py-3 bg-zinc-950 border border-zinc-900 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-xs text-zinc-200 font-light placeholder-zinc-700" placeholder="••••••••">
+            </div>
+
+            <button type="submit" id="btnLoginSubmit" class="w-full py-3.5 px-4 bg-white text-zinc-950 hover:bg-zinc-200 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors mt-6">
+                Sign In
+            </button>
+            
+            <p class="text-center text-xs text-zinc-500 mt-6 font-light">
+                New identity? <a href="/signup" class="text-zinc-300 hover:underline">Register account</a>
+            </p>
+        </form>
+
+        <form id="forgotForm" class="space-y-4 hidden">
+            <div>
+                <label class="block text-[10px] uppercase font-medium tracking-wider text-zinc-500 mb-1.5">Account Email</label>
+                <input type="email" id="forgotEmail" required class="w-full px-4 py-3 bg-zinc-950 border border-zinc-900 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-xs text-zinc-200 font-light placeholder-zinc-700" placeholder="name@domain.com">
+            </div>
+
+            <button type="submit" id="btnForgotSubmit" class="w-full py-3.5 px-4 bg-white text-zinc-950 hover:bg-zinc-200 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors mt-6">
+                Send Recovery OTP
+            </button>
+            
+            <button type="button" onclick="switchToLogin()" class="w-full text-center text-[10px] text-zinc-500 hover:text-zinc-300 font-mono uppercase tracking-wider block mt-4">
+                ← Back to Login
+            </button>
+        </form>
+
+        <form id="resetForm" class="space-y-4 hidden">
+            <div>
+                <label class="block text-[10px] uppercase font-medium tracking-wider text-zinc-500 mb-1.5">6-Digit Recovery OTP</label>
+                <input type="text" id="resetOtp" maxlength="6" required class="w-full text-center tracking-[0.5em] font-mono px-4 py-3 bg-zinc-950 border border-zinc-900 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm text-white placeholder-zinc-800" placeholder="000000">
+            </div>
+            <div>
+                <label class="block text-[10px] uppercase font-medium tracking-wider text-zinc-500 mb-1.5">New Secret Password</label>
+                <input type="password" id="resetNewPassword" required class="w-full px-4 py-3 bg-zinc-950 border border-zinc-900 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-xs text-zinc-200 font-light placeholder-zinc-700" placeholder="••••••••">
+            </div>
+
+            <button type="submit" id="btnResetSubmit" class="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors mt-6">
+                Update Password
+            </button>
+        </form>
+
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const forgotForm = document.getElementById('forgotForm');
+        const resetForm = document.getElementById('resetForm');
+        const alertBox = document.getElementById('alertBox');
+        
+        const formTitle = document.getElementById('formTitle');
+        const formSubtitle = document.getElementById('formSubtitle');
+
+        function displayAlert(msg, isSuccess = false) {
+            alertBox.textContent = msg;
+            alertBox.className = `text-xs p-3.5 mb-5 rounded-xl border font-light ${
+                isSuccess ? 'bg-emerald-950/30 border-emerald-900/50 text-emerald-400' : 'bg-red-950/30 border-red-900/50 text-red-400'
+            }`;
+            alertBox.classList.remove('hidden');
+        }
+
+        function switchToForgot() {
+            loginForm.classList.add('hidden');
+            forgotForm.classList.remove('hidden');
+            alertBox.classList.add('hidden');
+            formTitle.textContent = "Recover access.";
+            formSubtitle.textContent = "Enter your registration email to receive a recovery token.";
+        }
+
+        function switchToLogin() {
+            forgotForm.classList.add('hidden');
+            resetForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+            alertBox.classList.add('hidden');
+            formTitle.textContent = "Welcome back.";
+            formSubtitle.textContent = "Input authorization parameters to access your terminal.";
+        }
+
+        // Action 1: Handle Profile Authorization (Login)
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnLoginSubmit');
+            btn.disabled = true;
+            btn.textContent = "Verifying identity...";
+
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    displayAlert(data.error || "Authentication rejected.");
+                    btn.disabled = false;
+                    btn.textContent = "Sign In";
+                } else {
+                    displayAlert("Identity authorized. Loading workspace...", true);
+                    setTimeout(() => window.location.href = '/dashboard.html', 1000);
+                }
+            } catch (err) {
+                displayAlert("Network boundary exception encountered.");
+                btn.disabled = false;
+                btn.textContent = "Sign In";
+            }
+        });
+
+        // Action 2: Request Password Reset OTP Code
+        forgotForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnForgotSubmit');
+            btn.disabled = true;
+            btn.textContent = "Generating payload...";
+
+            const email = document.getElementById('forgotEmail').value;
+
+            try {
+                const response = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    displayAlert(data.error || "Error dispatching token.");
+                    btn.disabled = false;
+                    btn.textContent = "Send Recovery OTP";
+                } else {
+                    // Forward directly to verification and new password phase
+                    forgotForm.classList.add('hidden');
+                    resetForm.classList.remove('hidden');
+                    formTitle.textContent = "Reset credentials.";
+                    formSubtitle.textContent = `Provide the security token dispatched to ${email}`;
+                    displayAlert(data.message, true);
+                }
+            } catch (err) {
+                displayAlert("Network transport interface lost.");
+                btn.disabled = false;
+                btn.textContent = "Send Recovery OTP";
+            }
+        });
+
+        // Action 3: Verify OTP Token and Commit New Password
+        resetForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnResetSubmit');
+            btn.disabled = true;
+            btn.textContent = "Committing structural updates...";
+
+            const otp = document.getElementById('resetOtp').value;
+            const newPassword = document.getElementById('resetNewPassword').value;
+
+            try {
+                const response = await fetch('/api/auth/verify-and-reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ otp, newPassword })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    displayAlert(data.error || "Credential modification error.");
+                    btn.disabled = false;
+                    btn.textContent = "Update Password";
+                } else {
+                    displayAlert("Security update successful. Reloading profile panel...", true);
+                    setTimeout(() => {
+                        switchToLogin();
+                        document.getElementById('loginEmail').value = "";
+                        document.getElementById('loginPassword').value = "";
+                    }, 2000);
+                }
+            } catch (err) {
+                displayAlert("Database commitment pipeline failure.");
+                btn.disabled = false;
+                btn.textContent = "Update Password";
+            }
+        });
+    </script>
+</body>
+</html>

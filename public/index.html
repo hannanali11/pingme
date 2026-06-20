@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PingMe — Open, Instant, Minimal Communication</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <header class="fixed top-0 left-0 right-0 z-50 bg-zinc-950/40 backdrop-blur-xl border-b border-zinc-900/50">
+        <div class="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+            <a href="/" class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-indigo-500"></span>
+                pingme
+            </a>
+            
+            <nav class="hidden md:flex space-x-8 text-xs font-medium tracking-widest uppercase text-zinc-400">
+                <a href="#experience" class="hover:text-white transition-colors duration-200">The Experience</a>
+                <a href="#architecture" class="hover:text-white transition-colors duration-200">Architecture</a>
+                <a href="#faq" class="hover:text-white transition-colors duration-200">FAQ</a>
+            </nav>
+
+            <div class="flex items-center space-x-6">
+                <a href="/login" class="text-xs font-semibold tracking-wider uppercase text-zinc-400 hover:text-white transition-colors">Log In</a>
+                <a href="/signup" class="px-5 py-2 text-xs font-semibold tracking-wider uppercase bg-white text-black hover:bg-zinc-200 rounded-full transition-all shadow-sm">Get Started</a>
+            </div>
+        </div>
+    </header>
+
+    <section class="pt-40 pb-24 px-6 max-w-6xl mx-auto grid lg:grid-cols-12 gap-16 items-center">
+        <div class="lg:col-span-7 space-y-8">
+            <div class="inline-flex items-center gap-2.5 px-3 py-1 bg-zinc-900/80 border border-zinc-800 rounded-full text-[11px] font-medium text-zinc-400 tracking-wider uppercase">
+                <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span> 100% Free & Open Source
+            </div>
+            
+            <h1 class="text-4xl sm:text-6xl font-normal tracking-tight text-white leading-[1.1]">
+                Communication, <br><span class="text-zinc-500">stripped of the noise.</span>
+            </h1>
+            
+            <p class="text-zinc-400 text-base md:text-lg leading-relaxed max-w-lg font-light">
+                PingMe is a distraction-free environment utilizing raw WebSockets. No tracking modules, no payment walls, and no subscription popups. Just pure, immediate synchronization.
+            </p>
+            
+            <div class="flex flex-wrap gap-4 pt-4">
+                <a href="/signup" class="px-7 py-3.5 bg-white text-zinc-950 rounded-full text-xs font-semibold tracking-wider uppercase hover:bg-zinc-200 transition-colors">
+                    Create a Permanent Account
+                </a>
+                <a href="#experience" class="px-7 py-3.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 text-zinc-300 rounded-full text-xs font-semibold tracking-wider uppercase transition-colors">
+                    See Features
+                </a>
+            </div>
+        </div>
+
+        <div class="lg:col-span-5 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-2xl backdrop-blur-sm w-full max-w-md mx-auto">
+            <div class="flex items-center justify-between pb-4 border-b border-zinc-900 mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="h-3 w-3 rounded-full bg-indigo-500/80 animate-pulse"></div>
+                    <span class="text-xs font-medium tracking-wider text-zinc-300 uppercase">Live Sandbox Connection</span>
+                </div>
+                <span class="text-[10px] font-mono text-zinc-500">latency: 14ms</span>
+            </div>
+            
+            <div class="space-y-4 h-64 overflow-y-auto pr-1 text-xs flex flex-col justify-end font-light">
+                <div class="bg-zinc-900 border border-zinc-800/60 p-3.5 rounded-xl rounded-tl-none max-w-[85%] self-start text-zinc-300">
+                    <span class="block text-[10px] text-indigo-400 font-mono mb-1 uppercase tracking-wider">System</span>
+                    Welcome to PingMe. Try sending a quick test payload.
+                </div>
+                <div class="bg-zinc-100 text-zinc-900 p-3.5 rounded-xl rounded-tr-none max-w-[85%] self-end">
+                    Looks incredibly sharp. Clean fonts, zero clutter.
+                </div>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-zinc-900 flex gap-2">
+                <input type="text" disabled placeholder="Type your text inline..." class="bg-zinc-950 border border-zinc-900 text-zinc-300 rounded-xl px-4 py-3 text-xs flex-grow focus:outline-none placeholder-zinc-600 font-light">
+                <button class="bg-zinc-800 text-zinc-400 px-4 rounded-xl text-xs font-medium hover:text-white hover:bg-zinc-700 transition-colors">Send</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="experience" class="py-24 border-y border-zinc-900 bg-zinc-900/10 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="max-w-xl mb-16">
+                <span class="text-[10px] tracking-widest font-bold text-indigo-400 uppercase block mb-3">Core Pillars</span>
+                <h2 class="text-2xl md:text-3xl font-normal text-white tracking-tight">Purposefully designed for speed.</h2>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-12">
+                <div class="space-y-3">
+                    <div class="text-white font-medium text-sm tracking-wide">01 // Zero Database Drag</div>
+                    <p class="text-zinc-400 text-xs leading-relaxed font-light">
+                        Messages flow directly through specialized node socket layers, ensuring your communication updates instantly without awaiting structural table read/write validation pipelines.
+                    </p>
+                </div>
+                <div class="space-y-3">
+                    <div class="text-white font-medium text-sm tracking-wide">02 // Open Governance</div>
+                    <p class="text-zinc-400 text-xs leading-relaxed font-light">
+                        No credit cards, no tiers, no restricted messaging caps. The underlying software remains distributed as a utility engine designed for everyone equally.
+                    </p>
+                </div>
+                <div class="space-y-3">
+                    <div class="text-white font-medium text-sm tracking-wide">03 // Fluid Interactivity</div>
+                    <p class="text-zinc-400 text-xs leading-relaxed font-light">
+                        By integrating pure inline DOM event scripting, the system responds entirely layout-shift free, keeping memory footprints down on both low-end mobile and desktop variants.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture" class="py-24 px-6 max-w-6xl mx-auto grid md:grid-cols-12 gap-16 items-center">
+        <div class="md:col-span-5 order-last md:order-first">
+            <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-6 font-mono text-[11px] text-zinc-400 space-y-4 shadow-sm">
+                <div class="text-zinc-500 pb-2 border-b border-zinc-900 uppercase tracking-wider text-[10px]">Environment Checklist</div>
+                <div class="flex justify-between items-center"><span class="text-zinc-600">Runtime Context</span><span class="text-zinc-200">Node.js Engine</span></div>
+                <div class="flex justify-between items-center"><span class="text-zinc-600">Routing Core</span><span class="text-zinc-200">Express Framework</span></div>
+                <div class="flex justify-between items-center"><span class="text-zinc-600">Transport Driver</span><span class="text-zinc-200">WebSockets (Socket.io)</span></div>
+                <div class="flex justify-between items-center"><span class="text-zinc-600">Style Architecture</span><span class="text-zinc-200">Tailwind Engine V4</span></div>
+                <div class="flex justify-between items-center pt-2 border-t border-zinc-900"><span class="text-indigo-400">Subscription Fees</span><span class="text-emerald-400 font-semibold">$0.00 FREE</span></div>
+            </div>
+        </div>
+        
+        <div class="md:col-span-7 space-y-6">
+            <span class="text-[10px] tracking-widest font-bold text-indigo-400 uppercase block">Under the Hood</span>
+            <h2 class="text-2xl md:text-3xl font-normal text-white tracking-tight">Lightweight stack. Heavyweight results.</h2>
+            <p class="text-zinc-400 text-sm leading-relaxed font-light">
+                By serving standard static components inside Node’s `public` framework asset directory, we cut processing layers entirely out. Server allocations go exactly where they belong: pushing bytes between connected individuals globally.
+            </p>
+        </div>
+    </section>
+
+    <section id="faq" class="py-24 px-6 border-t border-zinc-900 max-w-4xl mx-auto">
+        <div class="text-center mb-16">
+            <h2 class="text-2xl font-normal text-white tracking-tight">Common Questions</h2>
+        </div>
+        
+        <div class="space-y-3">
+            <div class="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-900/10">
+                <button onclick="toggleFaq(this)" class="w-full text-left px-6 py-4 text-xs font-medium uppercase tracking-wider text-zinc-300 flex justify-between items-center hover:bg-zinc-900/30 transition-colors">
+                    <span>Is this a free trial window?</span>
+                    <span class="text-lg text-zinc-600 transition-transform duration-200">+</span>
+                </button>
+                <div class="max-h-0 overflow-hidden transition-all duration-200 ease-in-out">
+                    <p class="px-6 pb-6 pt-2 text-xs text-zinc-400 font-light leading-relaxed">
+                        No. PingMe contains absolutely no financial backend logic, payment processors, or database hooks for tier validation. It is engineered entirely as an open messaging application environment free to run permanently.
+                    </p>
+                </div>
+            </div>
+
+            <div class="border border-zinc-900 rounded-xl overflow-hidden bg-zinc-900/10">
+                <button onclick="toggleFaq(this)" class="w-full text-left px-6 py-4 text-xs font-medium uppercase tracking-wider text-zinc-300 flex justify-between items-center hover:bg-zinc-900/30 transition-colors">
+                    <span>Can I spin this project up on my own local hardware?</span>
+                    <span class="text-lg text-zinc-600 transition-transform duration-200">+</span>
+                </button>
+                <div class="max-h-0 overflow-hidden transition-all duration-200 ease-in-out">
+                    <p class="px-6 pb-6 pt-2 text-xs text-zinc-400 font-light leading-relaxed">
+                        Yes. Because it uses Node, Express, and local asset distribution directories, you can clone the raw files onto any machine, run `npm install`, and serve your own private network infrastructure in seconds.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="border-t border-zinc-900 py-12 px-6 text-[11px] font-mono text-zinc-600">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div>&copy; 2026 pingme. open-source utility engine.</div>
+            <div class="flex space-x-6">
+                <a href="#experience" class="hover:text-zinc-400 transition-colors">experience</a>
+                <a href="#architecture" class="hover:text-zinc-400 transition-colors">architecture</a>
+                <a href="/login" class="hover:text-zinc-400 text-zinc-400 transition-colors">portal_access</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function toggleFaq(button) {
+            const content = button.nextElementSibling;
+            const statusIcon = button.querySelector('span:last-child');
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                statusIcon.textContent = '+';
+                statusIcon.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                statusIcon.textContent = '−';
+                statusIcon.style.transform = 'rotate(180deg)';
+            }
+        }
+    </script>
+</body>
+</html>
