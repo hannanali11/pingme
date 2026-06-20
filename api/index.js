@@ -32,11 +32,12 @@ webpush.setVapidDetails(
     vapidKeys.privateKey
 );
 
-const uploadDir = './public/uploads';
-if (!fs.existsSync(uploadDir)){
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
+// Update your storage configuration to use memory memory instead of disk
+const storage = multer.memoryStorage(); 
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 15 * 1024 * 1024 } 
+});
 // ================= MULTIPART MEDIA FILE DISK PERSISTENCE ENGINE =================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -474,6 +475,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 System active on port: ${PORT}`);
-});
+module.exports = app;
